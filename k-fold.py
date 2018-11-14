@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.linalg as la
 import linreg as lr
 
 def run(k, X, y):
@@ -27,3 +28,6 @@ def run(k, X, y):
         z[i] = val
 
     return z
+
+def linreg(X,y):
+    return np.dot(la.pinv(X), y)
