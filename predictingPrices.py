@@ -22,8 +22,6 @@ def k_fold(k, model, X, y):
         T = list(range(int((i * n) / k), int((n * (i + 1) / k))))
         S = [j for j in range(n) if j not in T]
         model.fit(X[S], y[S])
-        # y[T] will be len(T) by 1
-        # X[T] will be len(T) by d
         z[i] = (1. / len(T)) * np.sum((y[T] - model.predict(X[T])) ** 2)
     return z
 
@@ -66,7 +64,8 @@ def evaluateModel(model, X_test, y_test, name, splits=5):
 def evaluateWithKFold(model, training, target, name):
     print("K-fold CV: " + name)
     model_z = k_fold(5, model, training.values, target.values.ravel())
-    print(np.mean(model_z))
+    print("Mean Squared Error: " + str(np.mean(model_z)))
+    print("Root Mean Squared Error: " + str(math.sqrt(np.mean(model_z))))
 
 
 def dataPreprocessing(data):
