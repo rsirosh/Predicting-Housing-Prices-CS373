@@ -15,7 +15,19 @@ import timeit
 import math
 
 
-def modelPredictions(X_train, X_test, y_train, y_test):
+def k_fold(k, model, X, y):
+    n, d = X.shape
+    z = np.zeros((k, 1))
+    for i in range(k):
+        T = list(range(int((i * n) / k), int((n * (i + 1) / k))))
+        S = [j for j in range(n) if j not in T]
+        model.fit(X[S], y[S])
+        # y[T] will be len(T) by 1
+        # X[T] will be len(T) by d
+        z[i] = (1. / len(T)) * np.sum((y[T] - model.predict(X[T])) ** 2)
+    return z
+
+def modelPredictions(X_train, X_test, y_train, y_test, training, target):
 
     adaBoost = AdaBoostRegressor()
     adaBoost.fit(X_train, y_train.values.ravel())
@@ -33,6 +45,12 @@ def modelPredictions(X_train, X_test, y_train, y_test):
     svr_model.fit(X_train, y_train.values.ravel())
     evaluateModel(svr_model, X_test, y_test, "SVR")
 
+    evaluateWithKFold(adaBoost, training, target, "AdaBoost")
+    evaluateWithKFold(xgb, training, target, "XGBoost")
+    evaluateWithKFold(svc_model, training, target, "SVC")
+    evaluateWithKFold(svr_model, training, target, "SVR")
+
+
 
 def evaluateModel(model, X_test, y_test, name, splits=5):
     start_time = timeit.default_timer()
@@ -44,6 +62,11 @@ def evaluateModel(model, X_test, y_test, name, splits=5):
     print(name + ' Root Mean Squared Error: ', rmse)
 
     elapsed = timeit.default_timer() - start_time
+
+def evaluateWithKFold(model, training, target, name):
+    print("K-fold CV: " + name)
+    model_z = k_fold(5, model, training.values, target.values.ravel())
+    print(np.mean(model_z))
 
 
 def dataPreprocessing(data):
@@ -83,12 +106,12 @@ def dataPreprocessing(data):
     # This function splits the training and target sets into random train and test subsets
     X_train, X_test, y_train, y_test = train_test_split(training, target, test_size=test_size)
 
-    return X_train, X_test, y_train, y_test
+    return X_train, X_test, y_train, y_test, training, target
 
 
 if __name__ == "__main__":
     data = pd.read_csv("train.csv", header=0)
 
-    X_train, X_test, y_train, y_test = dataPreprocessing(data)
+    X_train, X_test, y_train, y_test, training, target = dataPreprocessing(data)
 
-    modelPredictions(X_train, X_test, y_train, y_test)
+    modelPredictions(X_train, X_test, y_train, y_test, training, target)
