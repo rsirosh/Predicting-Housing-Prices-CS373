@@ -37,7 +37,7 @@ def pca_proj(X,mu,Z):
 
 # In[191]:
 
-def k_fold(k, model, f, X, y):
+def k_fold(k, model, f, X, y, error_type="mse"):
     n, d = X.shape
     z = np.zeros((k, 1))
     for i in range(k):
@@ -54,13 +54,16 @@ def k_fold(k, model, f, X, y):
 
         # y[T] will be len(T) by 1
         # X[T] will be len(T) by d
-        z[i] = (1. / len(T)) * np.sum((y[T] - curr_model.predict(test_X)) ** 2)
+        if error_type == "mse":
+            z[i] = (1. / len(T)) * np.sum((y[T] - curr_model.predict(test_X)) ** 2)
+        elif error_type == "log_mse":
+            z[i] = (1. / len(T)) * np.sum((np.log(y[T] + 1) - np.log(curr_model.predict(test_X) + 1)) ** 2)
     return z
 
 
 # In[192]:
 
-def bootstrapping(B, model, f, X, y):
+def bootstrapping(B, model, f, X, y, error_type="mse"):
     n, d = X.shape
     z = np.zeros((B, 1))
     for i in range(B):
@@ -79,7 +82,10 @@ def bootstrapping(B, model, f, X, y):
         # y[T] will be len(T) by 1
         # X[T] will be len(T) by d
         # theta_hat will be d by 1
-        z[i] = (1. / len(T)) * np.sum((y[T] - curr_model.predict(test_X)) ** 2)
+        if error_type == "mse":
+            z[i] = (1. / len(T)) * np.sum((y[T] - curr_model.predict(test_X)) ** 2)
+        elif error_type == "log_mse":
+            z[i] = (1. / len(T)) * np.sum((np.log(y[T] + 1) - np.log(curr_model.predict(test_X) + 1)) ** 2)
     return z
 
 
@@ -89,14 +95,14 @@ def evaluate_model(model, f, X, y, k=5, B=5):
     ########################KFOLD###################
     print('Evaluating K-fold with %d folds.' % k)
     start_time = timeit.default_timer()
-    k_fold_z = k_fold(k, model, f, X, y)
+    k_fold_z = k_fold(k, model, f, X, y, error_type="log_mse")
     elapsed = timeit.default_timer() - start_time
     
     k_fold_mse = np.mean(k_fold_z)
-    print('K-fold Mean Squared Error: ', k_fold_mse)
+    print('K-fold Mean Squared log Error: ', k_fold_mse)
     
     k_fold_rmse = math.sqrt(k_fold_mse)
-    print('K-fold Square Root Mean Squared Error: ', k_fold_rmse)
+    print('K-fold Square Root Mean Squared log Error: ', k_fold_rmse)
 
     print("Time elapsed for k-fold: ", elapsed)
     
@@ -154,13 +160,13 @@ for i, b in enumerate((X.isnull().sum() / X.shape[0]) > 0.5):
 qualityCols = ['ExterQual', 'ExterCond', 'BsmtQual', 'BsmtCond', 'HeatingQC',
               'KitchenQual', 'FireplaceQu', 'GarageQual', 'GarageCond']
 
-data[qualityCols].head()
+X[qualityCols].head()
 
 for col in qualityCols:
     # NA is never used since all NA's got converted to NaN objects when pandas read in the csv
-    data[col] = data[col].map({'Ex': 5, 'Gd': 4, 'TA': 3, 'Fa': 2, 'Po':1, 'NA': 0})
+    X[col] = X[col].map({'Ex': 5, 'Gd': 4, 'TA': 3, 'Fa': 2, 'Po':1, 'NA': 0})
 
-data[qualityCols].head()
+X[qualityCols].head()
 
 
 # In[39]:
