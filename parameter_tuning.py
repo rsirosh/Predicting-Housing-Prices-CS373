@@ -37,23 +37,33 @@ def pca_proj(X,mu,Z):
 
 # In[191]:
 
-def k_fold(k, model, X, y):
+def k_fold(k, model, f, X, y, error_type="mse"):
     n, d = X.shape
     z = np.zeros((k, 1))
     for i in range(k):
         T = list(range(int((i * n) / k), int((n * (i + 1) / k))))
         S = [j for j in range(n) if j not in T]
         curr_model = clone(model)
-        curr_model.fit(X[S], y[S])
+
+        training_mu, training_Z = pca(f, X[S])
+        training_X = pca_proj(X[S], training_mu, training_Z)
+
+        curr_model.fit(training_X, y[S])
+
+        test_X = pca_proj(X[T], training_mu, training_Z)
+
         # y[T] will be len(T) by 1
         # X[T] will be len(T) by d
-        z[i] = (1. / len(T)) * np.sum((y[T] - curr_model.predict(X[T])) ** 2)
+        if error_type == "mse":
+            z[i] = (1. / len(T)) * np.sum((y[T] - curr_model.predict(test_X)) ** 2)
+        elif error_type == "log_mse":
+            z[i] = (1. / len(T)) * np.sum((np.log(y[T] + 1) - np.log(curr_model.predict(test_X) + 1)) ** 2)
     return z
 
 
 # In[192]:
 
-def bootstrapping(B, model, X, y):
+def bootstrapping(B, model, f, X, y, error_type="mse"):
     n, d = X.shape
     z = np.zeros((B, 1))
     for i in range(B):
@@ -61,28 +71,38 @@ def bootstrapping(B, model, X, y):
         S = np.unique(u)
         T = np.setdiff1d(np.arange(n), S, assume_unique=True)
         curr_model = clone(model)
-        curr_model.fit(X[u], y[u])
+
+        training_mu, training_Z = pca(f, X[u])
+        training_X = pca_proj(X[u], training_mu, training_Z)
+
+        curr_model.fit(training_X, y[u])
+
+        test_X = pca_proj(X[T], training_mu, training_Z)
+
         # y[T] will be len(T) by 1
         # X[T] will be len(T) by d
         # theta_hat will be d by 1
-        z[i] = (1. / len(T)) * np.sum((y[T] - curr_model.predict(X[T])) ** 2)
+        if error_type == "mse":
+            z[i] = (1. / len(T)) * np.sum((y[T] - curr_model.predict(test_X)) ** 2)
+        elif error_type == "log_mse":
+            z[i] = (1. / len(T)) * np.sum((np.log(y[T] + 1) - np.log(curr_model.predict(test_X) + 1)) ** 2)
     return z
 
 
 # In[205]:
 
-def evaluateModel(model, X, y, k=5, B=5):
+def evaluate_model(model, f, X, y, k=5, B=5):
     ########################KFOLD###################
     print('Evaluating K-fold with %d folds.' % k)
     start_time = timeit.default_timer()
-    k_fold_z = k_fold(k, model, X, y)
+    k_fold_z = k_fold(k, model, f, X, y, error_type="log_mse")
     elapsed = timeit.default_timer() - start_time
     
     k_fold_mse = np.mean(k_fold_z)
-    print('K-fold Mean Squared Error: ', k_fold_mse)
+    print('K-fold Mean Squared log Error: ', k_fold_mse)
     
     k_fold_rmse = math.sqrt(k_fold_mse)
-    print('K-fold Square Root Mean Squared Error: ', k_fold_rmse)
+    print('K-fold Square Root Mean Squared log Error: ', k_fold_rmse)
 
     print("Time elapsed for k-fold: ", elapsed)
     
@@ -91,7 +111,7 @@ def evaluateModel(model, X, y, k=5, B=5):
     ###################BOOTSTRAPPING################
     print('Evaluating bootstrapping with %d bootstraps.' % B)
     start_time = timeit.default_timer()
-    bootstrapping_z = bootstrapping(B, model, X, y)
+    bootstrapping_z = bootstrapping(B, model, f, X, y)
     elapsed = timeit.default_timer() - start_time
     
     bootstrapping_mse = np.mean(bootstrapping_z)
@@ -140,13 +160,13 @@ for i, b in enumerate((X.isnull().sum() / X.shape[0]) > 0.5):
 qualityCols = ['ExterQual', 'ExterCond', 'BsmtQual', 'BsmtCond', 'HeatingQC',
               'KitchenQual', 'FireplaceQu', 'GarageQual', 'GarageCond']
 
-data[qualityCols].head()
+X[qualityCols].head()
 
 for col in qualityCols:
     # NA is never used since all NA's got converted to NaN objects when pandas read in the csv
-    data[col] = data[col].map({'Ex': 5, 'Gd': 4, 'TA': 3, 'Fa': 2, 'Po':1, 'NA': 0})
+    X[col] = X[col].map({'Ex': 5, 'Gd': 4, 'TA': 3, 'Fa': 2, 'Po':1, 'NA': 0})
 
-data[qualityCols].head()
+X[qualityCols].head()
 
 
 # In[39]:
@@ -225,7 +245,7 @@ def rest(F, X, Y, X_train, y_train, X_test, y_test):
         print("\nAdaBoost")
         from sklearn.ensemble import AdaBoostRegressor
         adaBoost = AdaBoostRegressor()
-        k_z, k_mse, k_rmse, b_z, b_mse, b_rmse = evaluateModel(adaBoost, X_pca, Y.values.ravel(), k=5, B=5)
+        k_z, k_mse, k_rmse, b_z, b_mse, b_rmse = evaluate_model(adaBoost, f, X.values, Y.values.ravel(), k=5, B=5)
         if k_rmse < best_ada_rmse:
             best_ada_rmse = k_rmse
             best_ada_rmse_f = f
@@ -251,7 +271,7 @@ def rest(F, X, Y, X_train, y_train, X_test, y_test):
 
         xgb = XGBRegressor(max_depth=3, learning_rate=0.2, booster='gbtree', n_estimators=70)
 
-        k_z, k_mse, k_rmse, b_z, b_mse, b_rmse = evaluateModel(xgb, X_pca, Y.values.ravel(), k=5, B=5)
+        k_z, k_mse, k_rmse, b_z, b_mse, b_rmse = evaluate_model(xgb, f, X.values, Y.values.ravel(), k=5, B=5)
         if k_rmse < best_xg_rmse:
             best_xg_rmse = k_rmse
             best_xg_rmse_f = f
@@ -280,7 +300,7 @@ def rest(F, X, Y, X_train, y_train, X_test, y_test):
 
         # without it, this model breaks for some reason
 
-        k_z, k_mse, k_rmse, b_z, b_mse, b_rmse = evaluateModel(svr_model, X_pca, Y.values.ravel(), k=5, B=5)
+        k_z, k_mse, k_rmse, b_z, b_mse, b_rmse = evaluate_model(svr_model, f, X.values, Y.values.ravel(), k=5, B=5)
         if k_rmse < best_svr_rmse:
             best_svr_rmse = k_rmse
             best_svr_rmse_f = f
